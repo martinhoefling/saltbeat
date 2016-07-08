@@ -1,0 +1,4 @@
+beat_name: saltbeat
+beat_url: 'https://github.com/martinhoefling/saltbeat'
+beat_repo: 'github.com/martinhoefling/saltbeat'
+beat_description: Sends salt master events to Logstash or directly to Elasticsearch.

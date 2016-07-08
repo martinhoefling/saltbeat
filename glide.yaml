@@ -1,0 +1,8 @@
+package: github.com/martinhoefling/saltbeat
+import:
+- package: github.com/elastic/beats
+  subpackages:
+  - libbeat/beat
+  - libbeat/common
+  - libbeat/logp
+  - libbeat/publisher

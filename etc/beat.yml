@@ -1,0 +1,7 @@
+################### Saltbeat Configuration Example #########################
+
+############################# Saltbeat ######################################
+
+saltbeat:
+  # Path to salt master event bus
+  master_event_pub: /var/run/salt/master/master_event_pub.ipc

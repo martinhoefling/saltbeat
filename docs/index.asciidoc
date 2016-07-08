@@ -1,0 +1,8 @@
+= Filebeat Reference
+:libbeat: http://www.elastic.co/guide/en/beats/libbeat/master
+:elasticsearch: https://www.elastic.co/guide/en/elasticsearch/reference/master/
+:version: 1.0.0
+:beatname_lc: saltbeat
+:beatname_uc: Saltbeat
+
+include::./fields.asciidoc[]
