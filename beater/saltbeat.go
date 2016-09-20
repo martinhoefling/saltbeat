@@ -1,7 +1,11 @@
 package beater
 
 import (
+	"encoding/json"
 	"fmt"
+	"reflect"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/elastic/beats/libbeat/beat"
@@ -11,7 +15,6 @@ import (
 
 	"bytes"
 	"net"
-	"reflect"
 
 	"github.com/martinhoefling/saltbeat/config"
 	"github.com/ugorji/go/codec"
@@ -20,7 +23,7 @@ import (
 type Saltbeat struct {
 	beatConfig       *config.Config
 	done             chan struct{}
-	messages         chan map[string]interface{}
+	messages         chan map[interface{}]interface{}
 	socketConnection *net.UnixConn
 	client           publisher.Client
 }
@@ -30,7 +33,7 @@ func New() *Saltbeat {
 	logp.Debug("beater", "Creating new beater")
 	return &Saltbeat{
 		done:     make(chan struct{}),
-		messages: make(chan map[string]interface{}),
+		messages: make(chan map[interface{}]interface{}),
 	}
 }
 
@@ -70,24 +73,45 @@ func (bt *Saltbeat) Setup(b *beat.Beat) error {
 	go func() {
 		var err error
 		var handle codec.MsgpackHandle
-		handle.MapType = reflect.TypeOf(map[string]interface{}(nil))
+		//handle.MapType = reflect.TypeOf(map[string]interface{}(nil))
 		for {
 			logp.Debug("message", "Waiting for message")
 			message_decoder := codec.NewDecoder(bt.socketConnection, &handle)
-			var message map[string]interface{}
+			var message map[interface{}]interface{}
 			err = message_decoder.Decode(&message)
 			if err != nil {
-				logp.WTF(err.Error())
+				if err.Error() == "EOF" || err.Error() == "unexpected EOF" {
+					logp.Debug("message", "EOF, reconnecting")
+					bt.socketConnection.Close()
+
+					bt.socketConnection, err = net.DialUnix("unix", nil, &net.UnixAddr{bt.beatConfig.Saltbeat.MasterEventPub, "unix"})
+					if err != nil {
+						return
+					}
+					err = bt.socketConnection.CloseWrite()
+					if err != nil {
+						return
+					}
+				} else {
+					logp.WTF(err.Error())
+				}
+			} else {
+				logp.Debug("message", "Message read")
+
+				bt.messages <- message
 			}
-			logp.Debug("message", "Message read")
-			bt.messages <- message
 		}
 	}()
 
 	return nil
 }
 
-func parseMessage(handle codec.MsgpackHandle, message map[string]interface{}) (string, map[string]interface{}) {
+type salt_args struct {
+	Name string
+	Args map[string]interface{} `json:"omitempty"`
+}
+
+func parseMessage(handle codec.MsgpackHandle, message map[interface{}]interface{}) (string, map[string]interface{}) {
 	body := message["body"].([]byte)
 	newline := byte(10)
 	splitted := bytes.SplitN(body, []byte{newline, newline}, 2)
@@ -103,6 +127,105 @@ func parseMessage(handle codec.MsgpackHandle, message map[string]interface{}) (s
 	if err != nil {
 		logp.WTF(err.Error())
 	}
+
+	if _, ok := payload["fun_args"]; ok {
+		b, _ := json.MarshalIndent(payload["fun_args"], "", "  ")
+		if strings.Replace(string(b), " ", "", -1) != "" {
+			jsonStrings := strings.Split(string(b), "\n")
+
+			if len(jsonStrings) > 1 {
+				var newJsonString bytes.Buffer
+				inObject := false
+
+				for index, line := range jsonStrings {
+					if index == 0 {
+						newJsonString.WriteString("{\n")
+						continue
+					} else if index == len(jsonStrings)-1 {
+						newJsonString.WriteString("}\n")
+						continue
+					}
+
+					if strings.Replace(line, " ", "", -1) == "{" {
+						inObject = true
+						continue
+					}
+
+					if strings.Replace(line, " ", "", -1) == "}" && inObject {
+						inObject = false
+						continue
+					}
+
+					if !inObject {
+						newJsonString.WriteString("  \"arg")
+						newJsonString.WriteString(strconv.Itoa(index))
+						newJsonString.WriteString("\": ")
+						newJsonString.WriteString(line)
+						newJsonString.WriteString("\n")
+					} else {
+						newJsonString.WriteString(line)
+						newJsonString.WriteString("\n")
+					}
+				}
+
+				var newArg interface{}
+				json.Unmarshal(newJsonString.Bytes(), &newArg)
+
+				payload["fun_args"] = newArg
+			}
+		}
+	}
+
+	if _, ok := payload["arg"]; ok {
+		b, _ := json.MarshalIndent(payload["arg"], "", "  ")
+		if strings.Replace(string(b), " ", "", -1) != "" {
+			jsonStrings := strings.Split(string(b), "\n")
+
+			if len(jsonStrings) > 1 {
+				var newJsonString bytes.Buffer
+				inObject := false
+
+				for index, line := range jsonStrings {
+					if index == 0 {
+						newJsonString.WriteString("{\n")
+						continue
+					} else if index == len(jsonStrings)-1 {
+						newJsonString.WriteString("}\n")
+						continue
+					}
+
+					if strings.Replace(line, " ", "", -1) == "{" {
+						inObject = true
+						continue
+					}
+
+					if strings.Replace(line, " ", "", -1) == "}" && inObject {
+						inObject = false
+						continue
+					}
+
+					if !inObject {
+						newJsonString.WriteString("  \"arg")
+						newJsonString.WriteString(strconv.Itoa(index))
+						newJsonString.WriteString("\": ")
+						newJsonString.WriteString(line)
+						newJsonString.WriteString("\n")
+					} else {
+						newJsonString.WriteString(line)
+						newJsonString.WriteString("\n")
+					}
+				}
+
+				var newArg interface{}
+				json.Unmarshal(newJsonString.Bytes(), &newArg)
+
+				payload["arg"] = newArg
+			}
+		}
+	}
+
+	// Clear the return so we don't show passwords
+	payload["return"] = ""
 
 	logp.Debug("message", "Decoded payload is %s", payload)
 	return tag, payload
