@@ -106,11 +106,6 @@ func (bt *Saltbeat) Setup(b *beat.Beat) error {
 	return nil
 }
 
-type salt_args struct {
-	Name string
-	Args map[string]interface{} `json:"omitempty"`
-}
-
 func parseMessage(handle codec.MsgpackHandle, message map[interface{}]interface{}) (string, map[string]interface{}) {
 	body := message["body"].([]byte)
 	newline := byte(10)
