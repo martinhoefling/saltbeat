@@ -1,0 +1,10 @@
+build:
+  binary: saltbeat
+  goos:
+    - darwin
+    - linux
+  goarch:
+    - amd64
+    - arm
+    - arm64
+    - 386
