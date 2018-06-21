@@ -2,6 +2,7 @@ package beater
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/elastic/beats/libbeat/beat"
@@ -77,7 +78,7 @@ func (bt *Saltbeat) Setup(b *beat.Beat) error {
 			var message map[string]interface{}
 			err = message_decoder.Decode(&message)
 			if err != nil {
-				logp.WTF(err.Error())
+				logp.WTF(strings.Replace(err.Error(), "%", "%%", -1))
 			}
 			logp.Debug("message", "Message read")
 			bt.messages <- message
